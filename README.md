@@ -13,7 +13,7 @@ function heavyComputation(data: number[]) {
   for (let i = 0; i < data.length; i++) {
     result += Math.pow(data[i], 2);
   }
-  console.log("Result", result):
+  console.log("Result", result);
 }
 
 // Use the function as if it's running on the main thread
