@@ -7,14 +7,7 @@ const generate = require("@babel/generator").default;
 const babel = require("@babel/core");
 const t = require("@babel/types");
 
-let tempNameCounter = 0;
-
-function generateTempName() {
-  return `temp_${tempNameCounter++}`;
-}
-
 export default function transformEasyThreadFunctions(code) {
-  tempNameCounter = 0; // Reset the counter
   try {
     const ast = parseCode(code);
     const transformedCode = transformCode(ast, code);
@@ -106,7 +99,7 @@ function transformVariableDeclaration(node, code) {
     if (isTransformableFunction(declarator)) {
       const functionName = declarator.id.name;
       const functionCode = extractFunctionCode(declarator, code);
-      result += createWorkerCode(functionName, functionCode);
+      result += createWorkerCode(functionName, functionCode, true);
     } else {
       result += code.slice(declarator.start, declarator.end);
     }
@@ -132,12 +125,16 @@ function extractFunctionCode(declarator, code) {
 function transformFunctionDeclaration(node, code) {
   const functionName = node.id.name;
   const functionCode = code.slice(node.start, node.end);
-  return createWorkerCode(functionName, functionCode);
+  return createWorkerCode(functionName, functionCode, false);
 }
 
-function createWorkerCode(functionName, functionCode) {
+function createWorkerCode(functionName, functionCode, isVariableDeclaration) {
   const jsCode = removeTypeAnnotations(functionCode);
-  const workerFunctionCode = createWorkerFunctionCode(jsCode);
+  const workerFunctionCode = createWorkerFunctionCode(
+    jsCode,
+    functionName,
+    isVariableDeclaration
+  );
   return createWorkerSetupCode(functionName, workerFunctionCode);
 }
 
@@ -149,20 +146,24 @@ function removeTypeAnnotations(functionCode) {
   }).code;
 }
 
-function createWorkerFunctionCode(jsCode) {
-  const tempFunctionName = generateTempName();
+function createWorkerFunctionCode(jsCode, functionName, isVariableDeclaration) {
   let cleanedCode = cleanFunctionCode(jsCode);
 
+  let functionDeclaration = `const ${functionName} = ${cleanedCode}`;
+  if (isVariableDeclaration) {
+    functionDeclaration = `const ${cleanedCode}`;
+  }
+
   return `
-const ${tempFunctionName} = ${cleanedCode};
+${functionDeclaration}
 self.onmessage = function(e) {
-  const { args, messageId } = e.data;
-  Promise.resolve(${tempFunctionName}.apply(null, args))
+  const args = e.data;
+  Promise.resolve(${functionName}.apply(null, args))
     .then(result => {
-      self.postMessage({ result, messageId });
+      self.postMessage({ result });
     })
     .catch(error => {
-      self.postMessage({ error: error.message, messageId });
+      self.postMessage({ error: error.message });
     });
 };
 `;
@@ -173,22 +174,19 @@ function createWorkerSetupCode(functionName, workerFunctionCode) {
 const ${functionName} = (...args) => {
   return new Promise((resolve, reject) => {
     const worker = new Worker(URL.createObjectURL(new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' })));
-    const messageId = "${generateTempName()}";
 
     function handleMessage(e) {
-      if (e.data.messageId === messageId) {
-        worker.removeEventListener('message', handleMessage);
-        if (e.data.error) {
-          reject(new Error(e.data.error));
-        } else {
-          resolve(e.data.result);
-        }
-        worker.terminate();
+      worker.removeEventListener('message', handleMessage);
+      if (e.data.error) {
+        reject(new Error(e.data.error));
+      } else {
+        resolve(e.data.result);
       }
+      worker.terminate();
     }
 
     worker.addEventListener('message', handleMessage);
-    worker.postMessage({ args, messageId });
+    worker.postMessage(args);
   });
 };
 `;
@@ -207,7 +205,10 @@ function transformExpressionStatement(node, code) {
 
 function createAnonymousWorkerCode(functionCode) {
   const jsCode = removeTypeAnnotations(functionCode);
-  const workerFunctionCode = createWorkerFunctionCode(jsCode);
+  const workerFunctionCode = createWorkerFunctionCode(
+    jsCode,
+    "anonymousWorker"
+  );
   return createAnonymousWorkerSetupCode(workerFunctionCode);
 }
 
@@ -216,22 +217,19 @@ function createAnonymousWorkerSetupCode(workerFunctionCode) {
 (function(...args) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(URL.createObjectURL(new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' })));
-    const messageId = "${generateTempName()}";
 
     function handleMessage(e) {
-      if (e.data.messageId === messageId) {
-        worker.removeEventListener('message', handleMessage);
-        if (e.data.error) {
-          reject(new Error(e.data.error));
-        } else {
-          resolve(e.data.result);
-        }
-        worker.terminate();
+      worker.removeEventListener('message', handleMessage);
+      if (e.data.error) {
+        reject(new Error(e.data.error));
+      } else {
+        resolve(e.data.result);
       }
+      worker.terminate();
     }
 
     worker.addEventListener('message', handleMessage);
-    worker.postMessage({ args, messageId });
+    worker.postMessage(args);
   });
 })();
 `;
@@ -245,8 +243,8 @@ function generateOutput(transformedCode, originalCode) {
 function cleanFunctionCode(code) {
   return code
     .trim()
+    .replace(/^(export\s+)?(const|let|var)\s+(\w+)\s*=\s*/, "")
     .replace(/^(export\s+)?(async\s+)?function\s+\w+/, "function")
     .replace(/^\(|\)\s*\(\s*\)\s*;?\s*$/g, "")
-    .replace(/^\s*(?:async\s*)?\(\)\s*=>\s*{/, "() => {")
-    .replace(/}\s*$/, "}");
+    .replace(/;+$/, "");
 }
