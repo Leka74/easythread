@@ -7,9 +7,11 @@ const generate = require("@babel/generator").default;
 const babel = require("@babel/core");
 const t = require("@babel/types");
 
+let ast;
+
 export default function transformEasyThreadFunctions(code) {
   try {
-    const ast = parseCode(code);
+    ast = parseCode(code);
     const transformedCode = transformCode(ast, code);
     const output = generateOutput(transformedCode, code);
     return output.code;
@@ -55,7 +57,6 @@ function shouldTransformNode(path) {
     return leadingComments.some((comment) => {
       const trimmedComment = comment.value.trim();
       return (
-        // Support for both // @easythread and /* @easythread */
         trimmedComment === "@easythread" || trimmedComment === "* @easythread"
       );
     });
@@ -148,7 +149,6 @@ function removeTypeAnnotations(functionCode) {
 
 function createWorkerFunctionCode(jsCode, functionName, isVariableDeclaration) {
   let cleanedCode = cleanFunctionCode(jsCode);
-
   let functionDeclaration = `const ${functionName} = ${cleanedCode}`;
   if (isVariableDeclaration) {
     functionDeclaration = `const ${cleanedCode}`;
@@ -157,7 +157,8 @@ function createWorkerFunctionCode(jsCode, functionName, isVariableDeclaration) {
   return `
 ${functionDeclaration}
 self.onmessage = function(e) {
-  const args = e.data;
+  const { args, externalVars } = e.data;
+  Object.assign(self, externalVars);
   Promise.resolve(${functionName}.apply(null, args))
     .then(result => {
       self.postMessage({ result });
@@ -170,6 +171,8 @@ self.onmessage = function(e) {
 }
 
 function createWorkerSetupCode(functionName, workerFunctionCode) {
+  const externalVars = getExternalVariables(functionName);
+
   return `
 const ${functionName} = (...args) => {
   return new Promise((resolve, reject) => {
@@ -186,10 +189,111 @@ const ${functionName} = (...args) => {
     }
 
     worker.addEventListener('message', handleMessage);
-    worker.postMessage(args);
+    const externalVars = { ${externalVars} };
+    worker.postMessage({ args, externalVars });
   });
 };
 `;
+}
+
+function getExternalVariables(functionName) {
+  let externalVars = new Set();
+  const workerGlobals = new Set([
+    "self",
+    "console",
+    "setTimeout",
+    "clearTimeout",
+    "setInterval",
+    "clearInterval",
+    "addEventListener",
+    "removeEventListener",
+    "postMessage",
+    "importScripts",
+    "crypto",
+    "indexedDB",
+    "fetch",
+    "WebSocket",
+    "XMLHttpRequest",
+    "TextEncoder",
+    "TextDecoder",
+    "URL",
+    "Blob",
+    "Worker",
+    "URLSearchParams",
+    "FormData",
+    "File",
+    "FileReader",
+    "FileList",
+    "Promise",
+  ]);
+
+  traverse(ast, {
+    Function(path) {
+      if (
+        (path.node.id && path.node.id.name === functionName) ||
+        (path.parent.type === "VariableDeclarator" &&
+          path.parent.id.name === functionName)
+      ) {
+        const functionScope = path.scope;
+        const outerScope = path.parentPath.scope;
+
+        path.traverse({
+          Identifier(idPath) {
+            const name = idPath.node.name;
+            if (idPath.isReferencedIdentifier()) {
+              const binding = idPath.scope.getBinding(name);
+              if (
+                !binding ||
+                (binding.scope !== functionScope &&
+                  binding.scope === outerScope)
+              ) {
+                if (
+                  !workerGlobals.has(name) &&
+                  !path.node.params.some((param) => param.name === name)
+                ) {
+                  externalVars.add(name);
+                }
+              }
+            }
+          },
+        });
+
+        path.stop();
+      }
+    },
+  });
+
+  const functionNode = findFunctionNode(functionName);
+  if (functionNode && functionNode.params) {
+    functionNode.params.forEach((param) => {
+      if (t.isIdentifier(param)) {
+        externalVars.delete(param.name);
+      } else if (t.isAssignmentPattern(param) && t.isIdentifier(param.left)) {
+        externalVars.delete(param.left.name);
+      }
+    });
+  }
+
+  return Array.from(externalVars)
+    .map((varName) => `${varName}: ${varName}`)
+    .join(", ");
+}
+
+function findFunctionNode(functionName) {
+  let foundNode = null;
+  traverse(ast, {
+    Function(path) {
+      if (
+        (path.node.id && path.node.id.name === functionName) ||
+        (path.parent.type === "VariableDeclarator" &&
+          path.parent.id.name === functionName)
+      ) {
+        foundNode = path.node;
+        path.stop();
+      }
+    },
+  });
+  return foundNode;
 }
 
 function transformExpressionStatement(node, code) {

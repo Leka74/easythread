@@ -58,3 +58,34 @@ console.log(
 
 console.log("Main thread continues execution immediately");
 ```
+
+### Using out-of-scope variables
+
+Easythread can automatically detect and pass variables that are defined outside the function's scope:
+
+```ts
+const multiplier = 2;
+const message = "Calculation complete!";
+
+/** @easythread */
+function outOfScopeExample(x: number): number {
+  const result = x multiplier;
+  console.log(message, result);
+  return result;
+}
+
+outOfScopeExample(10).then((result) => {
+  console.log("Result:", result);
+});
+```
+
+In this example, `multiplier` and `message` are automatically detected and passed to the worker thread.
+
+#### Limitations
+
+While Easythread can handle most primitive values and plain objects, there are some limitations on what can be passed to a worker thread:
+
+1. Functions: Worker threads cannot receive functions as arguments or use functions from the outer scope.
+2. DOM elements: Workers don't have access to the DOM, so DOM elements can't be passed or used.
+3. Complex objects: Objects with circular references or those that can't be cloned (like Symbols) cannot be passed to workers.
+4. Class instances: Instances of custom classes may lose their methods when passed to a worker.

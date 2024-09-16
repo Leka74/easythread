@@ -3,13 +3,20 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+const myMsg = "Hello worker";
+const thisArr = ["hello", "world"];
+const thisObj = {
+  name: "John",
+  age: 30,
+};
+
 /** @easythread */
 function heavyTask(count: number = 1) {
   // emulate a heavy computation
   for (let i = 0; i < count; i++) {
     // no-op
   }
-  console.log("heavy task done");
+  console.log(myMsg, thisArr, thisObj);
 }
 heavyTask(1000000000);
 heavyTask(1000000000);
