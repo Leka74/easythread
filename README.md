@@ -68,10 +68,10 @@ const multiplier = 2;
 const message = "Calculation complete!";
 
 /** @easythread */
-function outOfScopeExample(x: number): number {
+function outOfScopeExample(x: number): Promise<number> {
   const result = x * multiplier;
   console.log(message, result);
-  return result;
+  return Promise.resolve(result);
 }
 
 outOfScopeExample(10).then((result) => {
