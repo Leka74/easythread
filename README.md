@@ -69,7 +69,7 @@ const message = "Calculation complete!";
 
 /** @easythread */
 function outOfScopeExample(x: number): number {
-  const result = x multiplier;
+  const result = x * multiplier;
   console.log(message, result);
   return result;
 }
