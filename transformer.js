@@ -81,13 +81,13 @@ function transformExportNamedDeclaration(node, code) {
   if (t.isVariableDeclaration(node.declaration)) {
     const transformedDeclaration = transformVariableDeclaration(
       node.declaration,
-      code
+      code,
     );
     return `export ${transformedDeclaration}`;
   } else if (t.isFunctionDeclaration(node.declaration)) {
     const transformedFunction = transformFunctionDeclaration(
       node.declaration,
-      code
+      code,
     );
     return `export ${transformedFunction}`;
   }
@@ -134,7 +134,7 @@ function createWorkerCode(functionName, functionCode, isVariableDeclaration) {
   const workerFunctionCode = createWorkerFunctionCode(
     jsCode,
     functionName,
-    isVariableDeclaration
+    isVariableDeclaration,
   );
   return createWorkerSetupCode(functionName, workerFunctionCode);
 }
@@ -172,11 +172,15 @@ self.onmessage = function(e) {
 
 function createWorkerSetupCode(functionName, workerFunctionCode) {
   const externalVars = getExternalVariables(functionName);
+  const uniqueId = generateUniqueId();
+  const blobVarName = `__easythread_${functionName}Blob_${uniqueId}`;
 
   return `
+const ${blobVarName} = new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' });
 const ${functionName} = (...args) => {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(URL.createObjectURL(new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' })));
+    const url = URL.createObjectURL(${blobVarName});
+    const worker = new Worker(url);
 
     function handleMessage(e) {
       worker.removeEventListener('message', handleMessage);
@@ -186,6 +190,7 @@ const ${functionName} = (...args) => {
         resolve(e.data.result);
       }
       worker.terminate();
+      URL.revokeObjectURL(url);
     }
 
     worker.addEventListener('message', handleMessage);
@@ -225,6 +230,7 @@ function getExternalVariables(functionName) {
     "FileReader",
     "FileList",
     "Promise",
+    "Date",
   ]);
 
   traverse(ast, {
@@ -311,16 +317,20 @@ function createAnonymousWorkerCode(functionCode) {
   const jsCode = removeTypeAnnotations(functionCode);
   const workerFunctionCode = createWorkerFunctionCode(
     jsCode,
-    "anonymousWorker"
+    "anonymousWorker", 
   );
-  return createAnonymousWorkerSetupCode(workerFunctionCode);
+  const uniqueId = generateUniqueId();
+  return createAnonymousWorkerSetupCode(workerFunctionCode, uniqueId);
 }
 
-function createAnonymousWorkerSetupCode(workerFunctionCode) {
+function createAnonymousWorkerSetupCode(workerFunctionCode, uniqueId) {
+  const blobVarName = `__easythread_anonymousWorkerBlob_${uniqueId}`;
   return `
+const ${blobVarName} = new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' });
 (function(...args) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(URL.createObjectURL(new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' })));
+    const url = URL.createObjectURL(${blobVarName});
+    const worker = new Worker(url);
 
     function handleMessage(e) {
       worker.removeEventListener('message', handleMessage);
@@ -330,6 +340,7 @@ function createAnonymousWorkerSetupCode(workerFunctionCode) {
         resolve(e.data.result);
       }
       worker.terminate();
+      URL.revokeObjectURL(url);
     }
 
     worker.addEventListener('message', handleMessage);
@@ -337,6 +348,10 @@ function createAnonymousWorkerSetupCode(workerFunctionCode) {
   });
 })();
 `;
+}
+
+function generateUniqueId() {
+  return Math.random().toString(36).substr(2, 9);
 }
 
 function generateOutput(transformedCode, originalCode) {
