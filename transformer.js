@@ -10,14 +10,10 @@ const t = require("@babel/types");
 let ast;
 
 export default function transformEasyThreadFunctions(code) {
-  try {
-    ast = parseCode(code);
-    const transformedCode = transformCode(ast, code);
-    const output = generateOutput(transformedCode, code);
-    return output.code;
-  } catch (error) {
-    throw error;
-  }
+  ast = parseCode(code);
+  const transformedCode = transformCode(ast, code);
+  const output = generateOutput(transformedCode, code);
+  return output.code;
 }
 
 function parseCode(code) {
@@ -317,7 +313,7 @@ function createAnonymousWorkerCode(functionCode) {
   const jsCode = removeTypeAnnotations(functionCode);
   const workerFunctionCode = createWorkerFunctionCode(
     jsCode,
-    "anonymousWorker", 
+    "anonymousWorker",
   );
   const uniqueId = generateUniqueId();
   return createAnonymousWorkerSetupCode(workerFunctionCode, uniqueId);
