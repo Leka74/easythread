@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "@vitest/ui": "^2.1.9",
+    "nanoid": "^5.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9"

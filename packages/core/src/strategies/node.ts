@@ -72,11 +72,11 @@ export class NodeWorkerStrategy implements WorkerStrategy {
     const importStatements = this.generateImportStatements(imports, options);
 
     return `
-const { parentPort } = require('worker_threads');
-const { createRequire } = require('module');
-const path = require('path');
-const { pathToFileURL } = require('url');
-const { performance } = require('perf_hooks');
+import { parentPort } from 'worker_threads';
+import { createRequire } from 'module';
+import path from 'path';
+import { pathToFileURL } from 'url';
+import { performance } from 'perf_hooks';
 
 // Make performance.now() available globally for compatibility
 global.performance = performance;
@@ -138,6 +138,7 @@ parentPort.on('message', async (data) => {
     if (usedImports.length === 0) return { declarations: "", loadCode: "" };
 
     const requireStatements: string[] = [];
+    let hasNpmPackages = false;
 
     // Group imports by source
     const importsBySource = new Map<string, {
@@ -171,6 +172,7 @@ parentPort.on('message', async (data) => {
     // Generate require statements
     importsBySource.forEach((imports, source) => {
       let resolvedSource = source;
+      let isNpmPackage = false;
       
       // For relative imports, resolve the path
       if (source.startsWith(".") && options.filePath) {
@@ -217,14 +219,24 @@ parentPort.on('message', async (data) => {
         }
         
         resolvedSource = resolvedPath;
+      } else if (!source.startsWith("/") && !source.startsWith("file://")) {
+        // This is an npm package
+        isNpmPackage = true;
+        hasNpmPackages = true;
       }
 
       const moduleVar = `__module_${source.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      // Use dynamic import with file URL for better ES module support
-      const fileUrl = path.isAbsolute(resolvedSource) 
-        ? `pathToFileURL('${resolvedSource}').href`
-        : `'${resolvedSource}'`;
-      requireStatements.push(`const ${moduleVar} = await import(${fileUrl});`);
+      
+      if (isNpmPackage) {
+        // For npm packages, use createRequire to resolve from the main thread's context
+        requireStatements.push(`const ${moduleVar} = await import(require.resolve('${source}'));`);
+      } else {
+        // Use dynamic import with file URL for better ES module support
+        const fileUrl = path.isAbsolute(resolvedSource) 
+          ? `pathToFileURL('${resolvedSource}').href`
+          : `'${resolvedSource}'`;
+        requireStatements.push(`const ${moduleVar} = await import(${fileUrl});`);
+      }
 
       // Handle different import types
       if (imports.default) {
@@ -240,9 +252,16 @@ parentPort.on('message', async (data) => {
       });
     });
 
+    // If we have npm packages, add createRequire setup at the beginning
+    const finalStatements: string[] = [];
+    if (hasNpmPackages) {
+      finalStatements.push('const require = createRequire(import.meta.url);');
+    }
+    finalStatements.push(...requireStatements);
+
     return {
       declarations: "",
-      loadCode: requireStatements.join('\n')
+      loadCode: finalStatements.join('\n')
     };
   }
 
