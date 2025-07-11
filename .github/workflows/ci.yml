@@ -9,7 +9,7 @@ on:
     # Allow this workflow to be called by other workflows (like release)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
