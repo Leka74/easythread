@@ -27,7 +27,10 @@ jobs:
     
     # Only run if CI passes and this is a changeset release
     needs: [ci]
-    if: contains(github.event.head_commit.message, 'chore: version packages') || contains(github.event.head_commit.message, 'Release: Version Packages') || github.event_name == 'workflow_dispatch'
+    if: >
+      contains(github.event.head_commit.message, 'chore: version packages') ||
+      contains(github.event.head_commit.message, 'Release: Version Packages') ||
+      github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout code
