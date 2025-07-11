@@ -1,9 +1,11 @@
 name: Release & Publish
 
 on:
-  push:
-    branches:
-      - main
+  # Disabled automatic releases - use manual changeset workflow instead
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
