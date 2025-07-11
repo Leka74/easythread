@@ -11,6 +11,7 @@ export class BrowserWorkerStrategy implements WorkerStrategy {
     const blobVarName = `__easythread_${functionName}Blob_${uniqueId}`;
 
     const escapedWorkerFunction = workerCode
+      .replace(/\\/g, "\\\\")
       .replace(/`/g, "\\`")
       .replace(/\$/g, "\\$");
 
