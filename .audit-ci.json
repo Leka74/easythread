@@ -5,5 +5,21 @@
   "low": false,
   "package-manager": "pnpm",
   "report-type": "important",
-  "skip-dev": false
+  "skip-dev": false,
+  "licenses": {
+    "allowlist": [
+      "MIT",
+      "Apache-2.0",
+      "BSD-2-Clause", 
+      "BSD-3-Clause",
+      "ISC",
+      "BlueOak-1.0.0",
+      "CC0-1.0",
+      "0BSD",
+      "CC-BY-4.0"
+    ],
+    "excludePackages": [
+      "argparse@2.0.1"
+    ]
+  }
 }
