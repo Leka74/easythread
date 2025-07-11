@@ -233,7 +233,7 @@ jobs:
         working-directory: examples/vanilla-rollup
         run: |
           pnpm build
-          node dist/index.js
+          pnpm start
           echo "✅ Vanilla Rollup example working"
 
   publish-ready:
