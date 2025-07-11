@@ -122,7 +122,7 @@ describe('BrowserWorkerStrategy', () => {
 
       expect(result).toContain('helper');
       expect(result).toContain('lodash');
-      expect(result).toContain('await import(');
+      expect(result).toContain('resolvedImports[');
     });
 
     it('should handle performance correctly', () => {

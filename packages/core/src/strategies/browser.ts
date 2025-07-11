@@ -5,7 +5,7 @@ export class BrowserWorkerStrategy implements WorkerStrategy {
     functionName: string,
     workerCode: string,
     externalVars: string,
-    _imports: ImportInfo[]
+    imports: ImportInfo[]
   ): string {
     const uniqueId = this.generateUniqueId();
     const blobVarName = `__easythread_${functionName}Blob_${uniqueId}`;
@@ -15,46 +15,57 @@ export class BrowserWorkerStrategy implements WorkerStrategy {
       .replace(/`/g, "\\`")
       .replace(/\$/g, "\\$");
 
+    // Generate import resolution code for main thread
+    const importResolution = this.generateMainThreadImports(imports);
+
     return `
 const ${blobVarName} = new Blob([\`${escapedWorkerFunction}\`], { type: 'text/javascript' });
-const ${functionName} = (...args) => {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(${blobVarName});
-    const worker = new Worker(url, { type: 'module' });
+const ${functionName} = async (...args) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Resolve imports on the main thread
+      ${importResolution.resolveCode}
+      
+      const url = URL.createObjectURL(${blobVarName});
+      const worker = new Worker(url, { type: 'module' });
 
-    function handleMessage(e) {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      if (e.data.error) {
-        const error = new Error(e.data.error);
-        if (e.data.stack) {
-          error.stack = e.data.stack;
+      function handleMessage(e) {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        if (e.data.error) {
+          const error = new Error(e.data.error);
+          if (e.data.stack) {
+            error.stack = e.data.stack;
+          }
+          if (e.data.importError) {
+            error.message = \`Import Error: \${e.data.error}\`;
+          }
+          reject(error);
+        } else {
+          resolve(e.data.result);
         }
-        if (e.data.importError) {
-          error.message = \`Import Error: \${e.data.error}\`;
-        }
-        reject(error);
-      } else {
-        resolve(e.data.result);
+        worker.terminate();
+        URL.revokeObjectURL(url);
       }
-      worker.terminate();
-      URL.revokeObjectURL(url);
-    }
 
-    function handleError(error) {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-      reject(new Error(\`Worker Error: \${error.message || error}\`));
-      worker.terminate();
-      URL.revokeObjectURL(url);
-    }
+      function handleError(error) {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        reject(new Error(\`Worker Error: \${error.message || error}\`));
+        worker.terminate();
+        URL.revokeObjectURL(url);
+      }
 
-    worker.addEventListener('message', handleMessage);
-    worker.addEventListener('error', handleError);
-    
-    const externalVars = { ${externalVars} };
-    const baseURL = import.meta.url;
-    worker.postMessage({ args, externalVars, baseURL });
+      worker.addEventListener('message', handleMessage);
+      worker.addEventListener('error', handleError);
+      
+      const externalVars = { ${externalVars} };
+      const baseURL = import.meta.url;
+      const resolvedImports = { ${importResolution.importsObject} };
+      worker.postMessage({ args, externalVars, baseURL, resolvedImports });
+    } catch (error) {
+      reject(new Error(\`Failed to resolve imports: \${error.message}\`));
+    }
   });
 };
 `;
@@ -65,7 +76,7 @@ const ${functionName} = (...args) => {
     functionName: string,
     isVariableDeclaration: boolean,
     imports: ImportInfo[],
-    options: PluginOptions
+    _options: PluginOptions
   ): string {
     const cleanedCode = this.cleanFunctionCode(jsCode);
     let functionDeclaration = `const ${functionName} = ${cleanedCode}`;
@@ -73,19 +84,19 @@ const ${functionName} = (...args) => {
       functionDeclaration = `const ${cleanedCode}`;
     }
 
-    const dynamicImports = this.generateDynamicImports(imports, options);
+    const importAssignments = this.generateWorkerImportAssignments(imports);
 
     return `
-${dynamicImports.declarations}
 self.onmessage = async function(e) {
-  const { args, externalVars, baseURL } = e.data;
+  const { args, externalVars, baseURL, resolvedImports } = e.data;
   Object.assign(self, externalVars);
   
   // Store the base URL for import resolution
   self.__baseURL = baseURL;
   
   try {
-    ${dynamicImports.loadCode}
+    // Assign resolved imports to worker scope
+    ${importAssignments}
     
     ${functionDeclaration}
     
@@ -121,14 +132,14 @@ self.onmessage = async function(e) {
 `;
   }
 
-  private generateDynamicImports(
-    usedImports: ImportInfo[],
-    _options: PluginOptions = {}
-  ): { declarations: string; loadCode: string } {
-    if (usedImports.length === 0) return { declarations: "", loadCode: "" };
 
-    const declarations: string[] = [];
-    const loadStatements: string[] = [];
+  private generateMainThreadImports(imports: ImportInfo[]): { resolveCode: string; importsObject: string } {
+    if (imports.length === 0) {
+      return { resolveCode: "", importsObject: "" };
+    }
+
+    const resolveStatements: string[] = [];
+    const importAssignments: string[] = [];
 
     // Group imports by source
     const importsBySource = new Map<string, {
@@ -137,7 +148,7 @@ self.onmessage = async function(e) {
       namespace: string | null;
     }>();
 
-    usedImports.forEach((importInfo) => {
+    imports.forEach((importInfo) => {
       const { type, source, importedName, localName } = importInfo;
 
       if (!importsBySource.has(source)) {
@@ -159,53 +170,43 @@ self.onmessage = async function(e) {
       }
     });
 
-    // Generate dynamic import statements
+    // Generate import resolution code
     let moduleIndex = 0;
     importsBySource.forEach((imports, source) => {
-      const moduleVar = `__module${moduleIndex++}`;
+      const moduleVar = `__resolved_module_${moduleIndex++}`;
+      
+      resolveStatements.push(`const ${moduleVar} = await import('${source}');`);
 
-      // Keep the original source path for relative imports
-      const resolvedSource = source;
-
-      // Add module declaration
-      declarations.push(`let ${moduleVar};`);
-
-      // Add declarations for imported values
       if (imports.default) {
-        declarations.push(`let ${imports.default};`);
+        importAssignments.push(`'${imports.default}': ${moduleVar}.default`);
       }
       if (imports.namespace) {
-        declarations.push(`let ${imports.namespace};`);
-      }
-      imports.named.forEach(({ localName }) => {
-        declarations.push(`let ${localName};`);
-      });
-
-      // Add load statement with proper URL resolution
-      if (source.startsWith(".")) {
-        loadStatements.push(
-          `${moduleVar} = await import(new URL('${resolvedSource}', self.__baseURL).href);`
-        );
-      } else {
-        loadStatements.push(`${moduleVar} = await import('${resolvedSource}');`);
-      }
-
-      // Add assignment statements
-      if (imports.default) {
-        loadStatements.push(`${imports.default} = ${moduleVar}.default;`);
-      }
-      if (imports.namespace) {
-        loadStatements.push(`${imports.namespace} = ${moduleVar};`);
+        importAssignments.push(`'${imports.namespace}': ${moduleVar}`);
       }
       imports.named.forEach(({ importedName, localName }) => {
-        loadStatements.push(`${localName} = ${moduleVar}.${importedName};`);
+        importAssignments.push(`'${localName}': ${moduleVar}.${importedName}`);
       });
     });
 
     return {
-      declarations: declarations.join("\n"),
-      loadCode: loadStatements.join("\n    "),
+      resolveCode: resolveStatements.join('\n      '),
+      importsObject: importAssignments.join(', ')
     };
+  }
+
+  private generateWorkerImportAssignments(imports: ImportInfo[]): string {
+    if (imports.length === 0) {
+      return "";
+    }
+
+    const assignments: string[] = [];
+
+    imports.forEach((importInfo) => {
+      const { localName } = importInfo;
+      assignments.push(`const ${localName} = resolvedImports['${localName}'];`);
+    });
+
+    return assignments.join('\n    ');
   }
 
   private generateUniqueId(): string {
