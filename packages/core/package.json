@@ -1,0 +1,67 @@
+{
+  "name": "@easythread/core",
+  "version": "0.1.0",
+  "description": "Core transformer for easythread - automatic Web Worker and Worker Thread generation",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run"
+  },
+  "keywords": [
+    "web-workers",
+    "worker-threads",
+    "typescript",
+    "ast",
+    "transform"
+  ],
+  "author": "Lekë Dobruna",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leka74/easythread.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/leka74/easythread#readme",
+  "bugs": {
+    "url": "https://github.com/leka74/easythread/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/generator": "^7.28.0",
+    "@babel/parser": "^7.28.0",
+    "@babel/preset-typescript": "^7.27.1",
+    "@babel/traverse": "^7.28.0",
+    "@babel/types": "^7.28.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^2.1.9",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}

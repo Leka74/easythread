@@ -1,0 +1,81 @@
+name: Changeset Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+
+jobs:
+  version:
+    name: Create Changeset
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.13.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Create changeset
+        run: |
+          cat << EOF > .changeset/release-$(date +%s).md
+          ---
+          "@easythread/core": ${{ github.event.inputs.release_type }}
+          "@easythread/vite": ${{ github.event.inputs.release_type }}
+          "@easythread/rollup": ${{ github.event.inputs.release_type }}
+          "@easythread/esbuild": ${{ github.event.inputs.release_type }}
+          ---
+
+          Release ${{ github.event.inputs.release_type }} version with latest changes
+          EOF
+
+      - name: Version packages
+        run: pnpm changeset:version
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: version packages (${{ github.event.inputs.release_type }})"
+          title: "Release: Version Packages (${{ github.event.inputs.release_type }})"
+          body: |
+            ## 🚀 Version Packages (${{ github.event.inputs.release_type }})
+            
+            This PR was created by the changeset version workflow.
+            
+            ### Changes
+            - Updates package versions
+            - Updates CHANGELOG.md files
+            - Updates internal dependencies
+            
+            **Once merged, packages will be automatically published to npm.**
+          branch: changeset-release/${{ github.event.inputs.release_type }}-${{ github.run_number }}
+          delete-branch: true

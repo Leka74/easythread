@@ -1,0 +1,21 @@
+{
+  "name": "@easythread/example-vanilla-rollup",
+  "version": "0.1.0",
+  "description": "Vanilla JavaScript with Rollup example for easythread",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "start": "node dist/index.cjs",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@easythread/rollup": "workspace:*",
+    "@types/node": "^20.0.0",
+    "rollup": "^4.0.0",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "typescript": "^5.5.3"
+  }
+}

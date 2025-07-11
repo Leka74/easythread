@@ -1,0 +1,156 @@
+name: Release & Publish
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # First run the full CI pipeline
+  ci:
+    name: CI Pipeline
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Release & Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    # Only run if CI passes
+    needs: [ci]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.13.1
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # This expects you to have a script called release which does a build for your packages and calls changeset publish
+          publish: pnpm release
+          title: "Release: Version Packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Send Slack notification on release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          echo "🎉 New release published!"
+          echo "Published packages: ${{ steps.changesets.outputs.publishedPackages }}"
+
+  # Create GitHub releases when packages are published
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: needs.release.outputs.published == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.13.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Get latest version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -f "CHANGELOG.md" ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            head -n 50 CHANGELOG.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=New release with latest changes" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: ${{ steps.version.outputs.version }}
+          body: |
+            ## 🎉 New Release
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### 📦 Published Packages
+            - `@easythread/core`
+            - `@easythread/vite`
+            - `@easythread/rollup`
+            - `@easythread/esbuild`
+
+            ### 🚀 Installation
+            ```bash
+            # Core package
+            npm install @easythread/core
+
+            # Plugin for your bundler
+            npm install @easythread/vite
+            npm install @easythread/rollup
+            npm install @easythread/esbuild
+            ```
+
+            **Full Changelog**: https://github.com/leka74/easythread/compare/${{ github.event.before }}...${{ github.sha }}
+          draft: false
+          prerelease: false

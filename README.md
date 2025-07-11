@@ -1,6 +1,56 @@
 # Easythread
 
-Vite experimental plugin for improving the DX for worker threads.
+A collection of plugins for improving the developer experience with Web Workers and Worker Threads across different bundlers and environments.
+
+## Requirements
+
+- **Node.js**: >=20.0.0
+- **pnpm**: >=8.0.0 (for development)
+
+## Packages
+
+- **[@easythread/core](./packages/core)** - Core transformer with strategy pattern for different environments
+- **[@easythread/vite](./packages/vite-plugin)** - Vite plugin for browser environments (Web Workers)
+- **[@easythread/rollup](./packages/rollup-plugin)** - Rollup plugin for Node.js environments (Worker Threads)
+
+## Installation
+
+### For Vite (Browser/Web Workers)
+```bash
+npm install @easythread/vite
+# or
+pnpm add @easythread/vite
+```
+
+### For Rollup/Node.js (Worker Threads)
+```bash
+npm install @easythread/rollup
+# or
+pnpm add @easythread/rollup
+```
+
+## Configuration
+
+### Vite
+```js
+// vite.config.js
+import { defineConfig } from 'vite'
+import easythreadPlugin from '@easythread/vite'
+
+export default defineConfig({
+  plugins: [easythreadPlugin()],
+})
+```
+
+### Rollup
+```js
+// rollup.config.js
+import easythreadPlugin from '@easythread/rollup'
+
+export default {
+  plugins: [easythreadPlugin()],
+}
+```
 
 ## Usage
 
