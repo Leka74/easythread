@@ -1,5 +1,13 @@
 # @easythread/esbuild
 
+## 0.1.2
+
+### Patch Changes
+
+- Release patch version with latest changes
+- Updated dependencies
+  - @easythread/core@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes
