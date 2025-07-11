@@ -1,6 +1,6 @@
 {
   "name": "@easythread/esbuild",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ESBuild plugin for easythread - automatic Worker Thread generation for Node.js",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
