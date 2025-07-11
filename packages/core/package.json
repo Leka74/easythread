@@ -35,6 +35,18 @@
   ],
   "author": "Lekë Dobruna",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leka74/easythread.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/leka74/easythread#readme",
+  "bugs": {
+    "url": "https://github.com/leka74/easythread/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@babel/core": "^7.21.0",
     "@babel/generator": "^7.21.0",

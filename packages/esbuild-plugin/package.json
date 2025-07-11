@@ -32,6 +32,18 @@
   ],
   "author": "Lekë Dobruna",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leka74/easythread.git",
+    "directory": "packages/esbuild-plugin"
+  },
+  "homepage": "https://github.com/leka74/easythread#readme",
+  "bugs": {
+    "url": "https://github.com/leka74/easythread/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@easythread/core": "workspace:*"
   },

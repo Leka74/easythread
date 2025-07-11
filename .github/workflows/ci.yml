@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_call:
+    # Allow this workflow to be called by other workflows (like release)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
