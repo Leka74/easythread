@@ -19,6 +19,10 @@ jobs:
     name: Release & Publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
     
     # Only run if CI passes
     needs: [ci]

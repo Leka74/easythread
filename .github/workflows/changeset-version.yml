@@ -18,6 +18,9 @@ jobs:
     name: Create Changeset
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
     
     steps:
       - name: Checkout code
@@ -58,7 +61,7 @@ jobs:
           EOF
 
       - name: Version packages
-        run: pnpm changeset:version
+        run: pnpm changeset version
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
