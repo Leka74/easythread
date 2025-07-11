@@ -8,10 +8,15 @@ const babel = require("@babel/core");
 const t = require("@babel/types");
 
 let ast;
+let importStatements = [];
+let importBindings = new Map();
 
-export default function transformEasyThreadFunctions(code) {
+export default function transformEasyThreadFunctions(code, options = {}) {
   ast = parseCode(code);
-  const transformedCode = transformCode(ast, code);
+  importStatements = [];
+  importBindings = new Map();
+  collectImports(ast);
+  const transformedCode = transformCode(ast, code, options);
   const output = generateOutput(transformedCode, code);
   return output.code;
 }
@@ -24,7 +29,50 @@ function parseCode(code) {
   });
 }
 
-function transformCode(ast, code) {
+function collectImports(ast) {
+  traverse(ast, {
+    ImportDeclaration(path) {
+      const importSource = path.node.source.value;
+      const importCode = path.node;
+
+      importStatements.push({
+        source: importSource,
+        node: importCode,
+        start: path.node.start,
+        end: path.node.end,
+      });
+
+      path.node.specifiers.forEach((specifier) => {
+        if (t.isImportSpecifier(specifier)) {
+          const localName = specifier.local.name;
+          const importedName = specifier.imported.name;
+          importBindings.set(localName, {
+            type: "named",
+            source: importSource,
+            importedName,
+            localName,
+          });
+        } else if (t.isImportDefaultSpecifier(specifier)) {
+          const localName = specifier.local.name;
+          importBindings.set(localName, {
+            type: "default",
+            source: importSource,
+            localName,
+          });
+        } else if (t.isImportNamespaceSpecifier(specifier)) {
+          const localName = specifier.local.name;
+          importBindings.set(localName, {
+            type: "namespace",
+            source: importSource,
+            localName,
+          });
+        }
+      });
+    },
+  });
+}
+
+function transformCode(ast, code, options) {
   let transformedCode = "";
   let lastIndex = 0;
 
@@ -32,7 +80,7 @@ function transformCode(ast, code) {
     enter(path) {
       if (shouldTransformNode(path)) {
         transformedCode += code.slice(lastIndex, path.node.start);
-        transformedCode += transformNode(path.node, code);
+        transformedCode += transformNode(path.node, code, options);
         lastIndex = path.node.end;
       }
     },
@@ -60,43 +108,45 @@ function shouldTransformNode(path) {
   return false;
 }
 
-function transformNode(node, code) {
+function transformNode(node, code, options) {
   if (t.isVariableDeclaration(node)) {
-    return transformVariableDeclaration(node, code);
+    return transformVariableDeclaration(node, code, options);
   } else if (t.isFunctionDeclaration(node)) {
-    return transformFunctionDeclaration(node, code);
+    return transformFunctionDeclaration(node, code, options);
   } else if (t.isExportNamedDeclaration(node)) {
-    return transformExportNamedDeclaration(node, code);
+    return transformExportNamedDeclaration(node, code, options);
   } else if (t.isExpressionStatement(node)) {
-    return transformExpressionStatement(node, code);
+    return transformExpressionStatement(node, code, options);
   }
   return "";
 }
 
-function transformExportNamedDeclaration(node, code) {
+function transformExportNamedDeclaration(node, code, options) {
   if (t.isVariableDeclaration(node.declaration)) {
     const transformedDeclaration = transformVariableDeclaration(
       node.declaration,
       code,
+      options,
     );
     return `export ${transformedDeclaration}`;
   } else if (t.isFunctionDeclaration(node.declaration)) {
     const transformedFunction = transformFunctionDeclaration(
       node.declaration,
       code,
+      options,
     );
     return `export ${transformedFunction}`;
   }
   return code.slice(node.start, node.end);
 }
 
-function transformVariableDeclaration(node, code) {
+function transformVariableDeclaration(node, code, options) {
   let result = "";
   node.declarations.forEach((declarator) => {
     if (isTransformableFunction(declarator)) {
       const functionName = declarator.id.name;
       const functionCode = extractFunctionCode(declarator, code);
-      result += createWorkerCode(functionName, functionCode, true);
+      result += createWorkerCode(functionName, functionCode, true, options);
     } else {
       result += code.slice(declarator.start, declarator.end);
     }
@@ -119,20 +169,34 @@ function extractFunctionCode(declarator, code) {
   return code.slice(declarator.start, declarator.end);
 }
 
-function transformFunctionDeclaration(node, code) {
+function transformFunctionDeclaration(node, code, options) {
   const functionName = node.id.name;
   const functionCode = code.slice(node.start, node.end);
-  return createWorkerCode(functionName, functionCode, false);
+  return createWorkerCode(functionName, functionCode, false, options);
 }
 
-function createWorkerCode(functionName, functionCode, isVariableDeclaration) {
+function createWorkerCode(
+  functionName,
+  functionCode,
+  isVariableDeclaration,
+  options,
+) {
   const jsCode = removeTypeAnnotations(functionCode);
+  const { externalVarsString, usedImports } =
+    getExternalVariables(functionName);
   const workerFunctionCode = createWorkerFunctionCode(
     jsCode,
     functionName,
     isVariableDeclaration,
+    usedImports,
+    options,
   );
-  return createWorkerSetupCode(functionName, workerFunctionCode);
+  return createWorkerSetupCode(
+    functionName,
+    workerFunctionCode,
+    options,
+    externalVarsString,
+  );
 }
 
 function removeTypeAnnotations(functionCode) {
@@ -143,40 +207,140 @@ function removeTypeAnnotations(functionCode) {
   }).code;
 }
 
-function createWorkerFunctionCode(jsCode, functionName, isVariableDeclaration) {
+function createWorkerFunctionCode(
+  jsCode,
+  functionName,
+  isVariableDeclaration,
+  usedImports = [],
+  options = {},
+) {
   let cleanedCode = cleanFunctionCode(jsCode);
   let functionDeclaration = `const ${functionName} = ${cleanedCode}`;
   if (isVariableDeclaration) {
     functionDeclaration = `const ${cleanedCode}`;
   }
 
+  // Generate dynamic imports for the worker
+  const dynamicImports = generateDynamicImports(usedImports, options);
+
   return `
-${functionDeclaration}
-self.onmessage = function(e) {
-  const { args, externalVars } = e.data;
+${dynamicImports.declarations}
+self.onmessage = async function(e) {
+  const { args, externalVars, baseURL } = e.data;
   Object.assign(self, externalVars);
-  Promise.resolve(${functionName}.apply(null, args))
-    .then(result => {
-      self.postMessage({ result });
-    })
-    .catch(error => {
-      self.postMessage({ error: error.message });
-    });
+  
+  // Store the base URL for import resolution
+  self.__baseURL = baseURL;
+  
+  try {
+    ${dynamicImports.loadCode}
+    
+    ${functionDeclaration}
+    
+    const result = await Promise.resolve(${functionName}.apply(null, args));
+    self.postMessage({ result });
+  } catch (error) {
+    self.postMessage({ error: error.message });
+  }
 };
 `;
 }
 
-function createWorkerSetupCode(functionName, workerFunctionCode) {
-  const externalVars = getExternalVariables(functionName);
+function generateDynamicImports(usedImports, options = {}) {
+  if (usedImports.length === 0) return { declarations: "", loadCode: "" };
+
+  const declarations = [];
+  const loadStatements = [];
+
+  const importsBySource = new Map();
+
+  usedImports.forEach((importName) => {
+    const binding = importBindings.get(importName);
+    if (binding) {
+      const { type, source, importedName, localName } = binding;
+
+      if (!importsBySource.has(source)) {
+        importsBySource.set(source, {
+          named: [],
+          default: null,
+          namespace: null,
+        });
+      }
+
+      const sourceImports = importsBySource.get(source);
+
+      if (type === "named") {
+        sourceImports.named.push({ importedName, localName });
+      } else if (type === "default") {
+        sourceImports.default = localName;
+      } else if (type === "namespace") {
+        sourceImports.namespace = localName;
+      }
+    }
+  });
+
+  let moduleIndex = 0;
+  importsBySource.forEach((imports, source) => {
+    const moduleVar = `__module${moduleIndex++}`;
+
+    let resolvedSource = source;
+
+    declarations.push(`let ${moduleVar};`);
+
+    if (imports.default) {
+      declarations.push(`let ${imports.default};`);
+    }
+    if (imports.namespace) {
+      declarations.push(`let ${imports.namespace};`);
+    }
+    imports.named.forEach(({ localName }) => {
+      declarations.push(`let ${localName};`);
+    });
+
+    if (source.startsWith(".")) {
+      loadStatements.push(
+        `${moduleVar} = await import(new URL('${resolvedSource}', self.__baseURL).href);`,
+      );
+    } else {
+      loadStatements.push(`${moduleVar} = await import('${resolvedSource}');`);
+    }
+
+    if (imports.default) {
+      loadStatements.push(`${imports.default} = ${moduleVar}.default;`);
+    }
+    if (imports.namespace) {
+      loadStatements.push(`${imports.namespace} = ${moduleVar};`);
+    }
+    imports.named.forEach(({ importedName, localName }) => {
+      loadStatements.push(`${localName} = ${moduleVar}.${importedName};`);
+    });
+  });
+
+  return {
+    declarations: declarations.join("\n"),
+    loadCode: loadStatements.join("\n    "),
+  };
+}
+
+function createWorkerSetupCode(
+  functionName,
+  workerFunctionCode,
+  options,
+  externalVarsString = "",
+) {
   const uniqueId = generateUniqueId();
   const blobVarName = `__easythread_${functionName}Blob_${uniqueId}`;
 
+  const escapedWorkerFunction = workerFunctionCode
+    .replace(/`/g, "\\`")
+    .replace(/\$/g, "\\$");
+
   return `
-const ${blobVarName} = new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' });
+const ${blobVarName} = new Blob([\`${escapedWorkerFunction}\`], { type: 'text/javascript' });
 const ${functionName} = (...args) => {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(${blobVarName});
-    const worker = new Worker(url);
+    const worker = new Worker(url, { type: 'module' });
 
     function handleMessage(e) {
       worker.removeEventListener('message', handleMessage);
@@ -190,8 +354,9 @@ const ${functionName} = (...args) => {
     }
 
     worker.addEventListener('message', handleMessage);
-    const externalVars = { ${externalVars} };
-    worker.postMessage({ args, externalVars });
+    const externalVars = { ${externalVarsString} };
+    const baseURL = import.meta.url;
+    worker.postMessage({ args, externalVars, baseURL });
   });
 };
 `;
@@ -199,6 +364,7 @@ const ${functionName} = (...args) => {
 
 function getExternalVariables(functionName) {
   let externalVars = new Set();
+  let usedImports = new Set();
   const workerGlobals = new Set([
     "self",
     "console",
@@ -227,6 +393,31 @@ function getExternalVariables(functionName) {
     "FileList",
     "Promise",
     "Date",
+    "Array",
+    "Object",
+    "String",
+    "Number",
+    "Boolean",
+    "Math",
+    "JSON",
+    "RegExp",
+    "Error",
+    "Map",
+    "Set",
+    "WeakMap",
+    "WeakSet",
+    "Symbol",
+    "BigInt",
+    "Uint8Array",
+    "Uint16Array",
+    "Uint32Array",
+    "Int8Array",
+    "Int16Array",
+    "Int32Array",
+    "Float32Array",
+    "Float64Array",
+    "ArrayBuffer",
+    "DataView",
   ]);
 
   traverse(ast, {
@@ -244,7 +435,11 @@ function getExternalVariables(functionName) {
             const name = idPath.node.name;
             if (idPath.isReferencedIdentifier()) {
               const binding = idPath.scope.getBinding(name);
-              if (
+
+              // Check if this identifier is an import
+              if (importBindings.has(name)) {
+                usedImports.add(name);
+              } else if (
                 !binding ||
                 (binding.scope !== functionScope &&
                   binding.scope === outerScope)
@@ -276,9 +471,12 @@ function getExternalVariables(functionName) {
     });
   }
 
-  return Array.from(externalVars)
-    .map((varName) => `${varName}: ${varName}`)
-    .join(", ");
+  return {
+    externalVarsString: Array.from(externalVars)
+      .map((varName) => `${varName}: ${varName}`)
+      .join(", "),
+    usedImports: Array.from(usedImports),
+  };
 }
 
 function findFunctionNode(functionName) {
@@ -298,18 +496,18 @@ function findFunctionNode(functionName) {
   return foundNode;
 }
 
-function transformExpressionStatement(node, code) {
+function transformExpressionStatement(node, code, options) {
   if (
     t.isCallExpression(node.expression) &&
     t.isFunction(node.expression.callee)
   ) {
     const functionCode = code.slice(node.start, node.end);
-    return createAnonymousWorkerCode(functionCode);
+    return createAnonymousWorkerCode(functionCode, options);
   }
   return code.slice(node.start, node.end);
 }
 
-function createAnonymousWorkerCode(functionCode) {
+function createAnonymousWorkerCode(functionCode, options) {
   const jsCode = removeTypeAnnotations(functionCode);
   const workerFunctionCode = createWorkerFunctionCode(
     jsCode,
@@ -321,8 +519,12 @@ function createAnonymousWorkerCode(functionCode) {
 
 function createAnonymousWorkerSetupCode(workerFunctionCode, uniqueId) {
   const blobVarName = `__easythread_anonymousWorkerBlob_${uniqueId}`;
+  const escapedWorkerFunction = workerFunctionCode
+    .replace(/`/g, "\\`")
+    .replace(/\$/g, "\\$");
+
   return `
-const ${blobVarName} = new Blob([\`${workerFunctionCode}\`], { type: 'text/javascript' });
+const ${blobVarName} = new Blob([\`${escapedWorkerFunction}\`], { type: 'text/javascript' });
 (function(...args) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(${blobVarName});

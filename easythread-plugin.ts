@@ -13,7 +13,10 @@ export default function easythreadPlugin(): Plugin {
         id.endsWith(".jsx")
       ) {
         return {
-          code: transformEasyThreadFunctions(code),
+          code: transformEasyThreadFunctions(code, {
+            filePath: id,
+            resolveId: this.resolve?.bind(this),
+          }),
           map: null,
         };
       }
