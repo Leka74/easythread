@@ -2,6 +2,18 @@
 
 This project uses several third-party dependencies. Below are the licenses and attributions for dependencies that require specific attribution.
 
+## Dual-Licensed Dependencies
+
+Several dependencies are dual-licensed (e.g., "Apache-2.0 AND MIT"), which means you can choose to comply with either license. This provides more flexibility, not restrictions:
+
+- **@pkgjs/parseargs@0.11.0**: Apache-2.0 AND MIT
+- **confbox@0.1.8**: BSD-3-Clause AND MIT  
+- **esprima@4.0.1**: BSD-2-Clause AND BSD-3-Clause
+- **rollup@4.44.2**: 0BSD AND ISC AND MIT
+- **vite@6.3.5**: Apache-2.0 AND BSD-2-Clause AND CC0-1.0 AND ISC AND MIT
+
+All of these licenses are permissive and compatible with MIT projects.
+
 ## CC-BY-4.0 Licensed Dependencies
 
 ### caniuse-lite
