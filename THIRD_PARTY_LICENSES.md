@@ -14,6 +14,13 @@ Several dependencies are dual-licensed (e.g., "Apache-2.0 AND MIT"), which means
 
 All of these licenses are permissive and compatible with MIT projects.
 
+## Security Notice
+
+This project contains one moderate security vulnerability in development dependencies:
+- **esbuild vulnerability (GHSA-67mh-4wv8-2f99)**: Dev server request handling issue
+- **Impact**: Development-only, requires user interaction with malicious websites
+- **Mitigation**: Not exploitable in production builds, allowlisted in CI
+
 ## CC-BY-4.0 Licensed Dependencies
 
 ### caniuse-lite

@@ -2,6 +2,11 @@
 
 A collection of plugins for improving the developer experience with Web Workers and Worker Threads across different bundlers and environments.
 
+## Requirements
+
+- **Node.js**: >=20.0.0
+- **pnpm**: >=8.0.0 (for development)
+
 ## Packages
 
 - **[@easythread/core](./packages/core)** - Core transformer with strategy pattern for different environments
