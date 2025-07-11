@@ -361,6 +361,7 @@ export class EasythreadTransformer {
   private createAnonymousWorkerSetupCode(workerFunctionCode: string, uniqueId: string): string {
     const blobVarName = `__easythread_anonymousWorkerBlob_${uniqueId}`;
     const escapedWorkerFunction = workerFunctionCode
+      .replace(/\\/g, "\\\\")
       .replace(/`/g, "\\`")
       .replace(/\$/g, "\\$");
 

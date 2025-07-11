@@ -229,7 +229,9 @@ self.onmessage = async function(e) {
     }
     
     // Remove trailing semicolons
-    cleaned = cleaned.replace(/;+$/, "");
+    while (cleaned.endsWith(';')) {
+      cleaned = cleaned.slice(0, -1);
+    }
     
     return cleaned;
   }

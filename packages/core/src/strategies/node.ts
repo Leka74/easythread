@@ -263,7 +263,9 @@ parentPort.on('message', async (data) => {
     }
     
     // Remove trailing semicolons
-    cleaned = cleaned.replace(/;+$/, "");
+    while (cleaned.endsWith(';')) {
+      cleaned = cleaned.slice(0, -1);
+    }
     
     return cleaned;
   }
