@@ -1,10 +1,9 @@
 name: Release & Publish
 
 on:
-  # Disabled automatic releases - use manual changeset workflow instead
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -26,8 +25,9 @@ jobs:
       id-token: write
       packages: write
     
-    # Only run if CI passes
+    # Only run if CI passes and this is a changeset release
     needs: [ci]
+    if: contains(github.event.head_commit.message, 'chore: version packages') || contains(github.event.head_commit.message, 'Release: Version Packages') || github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout code
