@@ -122,7 +122,7 @@ describe('BrowserWorkerStrategy', () => {
 
       expect(result).toContain('helper');
       expect(result).toContain('lodash');
-      expect(result).toContain('resolvedImports[');
+      expect(result).toContain('await import(');
     });
 
     it('should handle performance correctly', () => {
@@ -151,6 +151,36 @@ describe('BrowserWorkerStrategy', () => {
       expect(result).toContain('error.stack');
       expect(result).toContain('importError');
       expect(result).toContain('is not defined');
+    });
+
+    it('should handle npm package imports with bundler requirement', () => {
+      const imports: ImportInfo[] = [
+        {
+          type: 'named',
+          source: 'nanoid',
+          importedName: 'nanoid',
+          localName: 'nanoid'
+        },
+        {
+          type: 'default',
+          source: 'lodash',
+          localName: 'lodash'
+        }
+      ];
+
+      const result = strategy.createWorkerRuntime(
+        'function test() { return nanoid(10); }',
+        'test',
+        false,
+        imports,
+        {}
+      );
+
+      expect(result).toContain('bundler resolution');
+      expect(result).toContain('await import(\'nanoid\')');
+      expect(result).toContain('await import(\'lodash\')');
+      expect(result).toContain('const { nanoid: nanoid }');
+      expect(result).toContain('const lodash = (await import(\'lodash\')).default;');
     });
   });
 

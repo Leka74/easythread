@@ -5,7 +5,7 @@ export class BrowserWorkerStrategy implements WorkerStrategy {
     functionName: string,
     workerCode: string,
     externalVars: string,
-    imports: ImportInfo[]
+    _imports: ImportInfo[]
   ): string {
     const uniqueId = this.generateUniqueId();
     const blobVarName = `__easythread_${functionName}Blob_${uniqueId}`;
@@ -15,57 +15,47 @@ export class BrowserWorkerStrategy implements WorkerStrategy {
       .replace(/`/g, "\\`")
       .replace(/\$/g, "\\$");
 
-    // Generate import resolution code for main thread
-    const importResolution = this.generateMainThreadImports(imports);
 
     return `
 const ${blobVarName} = new Blob([\`${escapedWorkerFunction}\`], { type: 'text/javascript' });
-const ${functionName} = async (...args) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      // Resolve imports on the main thread
-      ${importResolution.resolveCode}
-      
-      const url = URL.createObjectURL(${blobVarName});
-      const worker = new Worker(url, { type: 'module' });
+const ${functionName} = (...args) => {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(${blobVarName});
+    const worker = new Worker(url, { type: 'module' });
 
-      function handleMessage(e) {
-        worker.removeEventListener('message', handleMessage);
-        worker.removeEventListener('error', handleError);
-        if (e.data.error) {
-          const error = new Error(e.data.error);
-          if (e.data.stack) {
-            error.stack = e.data.stack;
-          }
-          if (e.data.importError) {
-            error.message = \`Import Error: \${e.data.error}\`;
-          }
-          reject(error);
-        } else {
-          resolve(e.data.result);
+    function handleMessage(e) {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      if (e.data.error) {
+        const error = new Error(e.data.error);
+        if (e.data.stack) {
+          error.stack = e.data.stack;
         }
-        worker.terminate();
-        URL.revokeObjectURL(url);
+        if (e.data.importError) {
+          error.message = \`Import Error: \${e.data.error}\`;
+        }
+        reject(error);
+      } else {
+        resolve(e.data.result);
       }
-
-      function handleError(error) {
-        worker.removeEventListener('message', handleMessage);
-        worker.removeEventListener('error', handleError);
-        reject(new Error(\`Worker Error: \${error.message || error}\`));
-        worker.terminate();
-        URL.revokeObjectURL(url);
-      }
-
-      worker.addEventListener('message', handleMessage);
-      worker.addEventListener('error', handleError);
-      
-      const externalVars = { ${externalVars} };
-      const baseURL = import.meta.url;
-      const resolvedImports = { ${importResolution.importsObject} };
-      worker.postMessage({ args, externalVars, baseURL, resolvedImports });
-    } catch (error) {
-      reject(new Error(\`Failed to resolve imports: \${error.message}\`));
+      worker.terminate();
+      URL.revokeObjectURL(url);
     }
+
+    function handleError(error) {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      reject(new Error(\`Worker Error: \${error.message || error}\`));
+      worker.terminate();
+      URL.revokeObjectURL(url);
+    }
+
+    worker.addEventListener('message', handleMessage);
+    worker.addEventListener('error', handleError);
+    
+    const externalVars = { ${externalVars} };
+    const baseURL = import.meta.url;
+    worker.postMessage({ args, externalVars, baseURL });
   });
 };
 `;
@@ -88,14 +78,14 @@ const ${functionName} = async (...args) => {
 
     return `
 self.onmessage = async function(e) {
-  const { args, externalVars, baseURL, resolvedImports } = e.data;
+  const { args, externalVars, baseURL } = e.data;
   Object.assign(self, externalVars);
   
   // Store the base URL for import resolution
   self.__baseURL = baseURL;
   
   try {
-    // Assign resolved imports to worker scope
+    // Import dependencies dynamically in worker
     ${importAssignments}
     
     ${functionDeclaration}
@@ -133,81 +123,51 @@ self.onmessage = async function(e) {
   }
 
 
-  private generateMainThreadImports(imports: ImportInfo[]): { resolveCode: string; importsObject: string } {
-    if (imports.length === 0) {
-      return { resolveCode: "", importsObject: "" };
-    }
-
-    const resolveStatements: string[] = [];
-    const importAssignments: string[] = [];
-
-    // Group imports by source
-    const importsBySource = new Map<string, {
-      named: Array<{ importedName: string; localName: string }>;
-      default: string | null;
-      namespace: string | null;
-    }>();
-
-    imports.forEach((importInfo) => {
-      const { type, source, importedName, localName } = importInfo;
-
-      if (!importsBySource.has(source)) {
-        importsBySource.set(source, {
-          named: [],
-          default: null,
-          namespace: null,
-        });
-      }
-
-      const sourceImports = importsBySource.get(source)!;
-
-      if (type === "named") {
-        sourceImports.named.push({ importedName: importedName!, localName });
-      } else if (type === "default") {
-        sourceImports.default = localName;
-      } else if (type === "namespace") {
-        sourceImports.namespace = localName;
-      }
-    });
-
-    // Generate import resolution code
-    let moduleIndex = 0;
-    importsBySource.forEach((imports, source) => {
-      const moduleVar = `__resolved_module_${moduleIndex++}`;
-      
-      resolveStatements.push(`const ${moduleVar} = await import('${source}');`);
-
-      if (imports.default) {
-        importAssignments.push(`'${imports.default}': ${moduleVar}.default`);
-      }
-      if (imports.namespace) {
-        importAssignments.push(`'${imports.namespace}': ${moduleVar}`);
-      }
-      imports.named.forEach(({ importedName, localName }) => {
-        importAssignments.push(`'${localName}': ${moduleVar}.${importedName}`);
-      });
-    });
-
-    return {
-      resolveCode: resolveStatements.join('\n      '),
-      importsObject: importAssignments.join(', ')
-    };
-  }
 
   private generateWorkerImportAssignments(imports: ImportInfo[]): string {
     if (imports.length === 0) {
       return "";
     }
 
-    const assignments: string[] = [];
-
+    // For browser workers, we'll use a different approach:
+    // Create a bundled version of dependencies that can be imported
+    const importStatements: string[] = [];
+    
+    // Add a warning comment
+    importStatements.push(`// Note: npm dependencies need to be bundled for worker usage`);
+    importStatements.push(`// Use a bundler like Vite/Webpack to resolve these imports`);
+    
     imports.forEach((importInfo) => {
-      const { localName } = importInfo;
-      assignments.push(`const ${localName} = resolvedImports['${localName}'];`);
+      const { type, source, importedName, localName } = importInfo;
+      
+      if (source.startsWith('./') || source.startsWith('../')) {
+        // Relative imports - try direct import
+        if (type === "named") {
+          importStatements.push(`const { ${importedName} } = await import('${source}');`);
+          if (importedName !== localName) {
+            importStatements.push(`const ${localName} = ${importedName};`);
+          }
+        } else if (type === "default") {
+          importStatements.push(`const ${localName} = (await import('${source}')).default;`);
+        } else if (type === "namespace") {
+          importStatements.push(`const ${localName} = await import('${source}');`);
+        }
+      } else {
+        // NPM packages - require bundler support
+        importStatements.push(`// Import '${source}' requires bundler resolution`);
+        if (type === "named") {
+          importStatements.push(`const { ${importedName}: ${localName} } = await import('${source}');`);
+        } else if (type === "default") {
+          importStatements.push(`const ${localName} = (await import('${source}')).default;`);
+        } else if (type === "namespace") {
+          importStatements.push(`const ${localName} = await import('${source}');`);
+        }
+      }
     });
 
-    return assignments.join('\n    ');
+    return importStatements.join('\n    ');
   }
+
 
   private generateUniqueId(): string {
     return Math.random().toString(36).substr(2, 9);
