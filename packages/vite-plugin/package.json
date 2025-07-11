@@ -1,6 +1,6 @@
 {
   "name": "@easythread/vite",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Vite plugin for easythread - automatic Web Worker generation",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
