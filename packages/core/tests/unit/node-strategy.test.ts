@@ -91,7 +91,7 @@ describe('NodeWorkerStrategy', () => {
 
       expect(result).toContain('parentPort');
       expect(result).toContain('worker_threads');
-      expect(result).toContain('const { performance } = require(\'perf_hooks\')');
+      expect(result).toContain('import { performance } from \'perf_hooks\'');
       expect(result).toContain('global.performance = performance');
       expect(result).toContain('const test = ');
       expect(result).toContain('x * 2');
@@ -313,7 +313,8 @@ describe('NodeWorkerStrategy', () => {
 
       const result = strategy['generateImportStatements'](imports, {});
       
-      expect(result.loadCode).toContain("await import('lodash')");
+      expect(result.loadCode).toContain("require.resolve('lodash')");
+      expect(result.loadCode).toContain("createRequire");
       expect(result.loadCode).not.toContain('pathToFileURL');
     });
   });
