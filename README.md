@@ -81,6 +81,33 @@ outOfScopeExample(10).then((result) => {
 
 In this example, `multiplier` and `message` are automatically detected and passed to the worker thread.
 
+### Using imported libraries
+
+Easythread now supports using imported functions and values within worker threads:
+
+```ts
+import { calculateHash } from 'crypto-lib';
+import utils from './utils';
+
+/** @easythread */
+async function processData(data: string): Promise<string> {
+  const hash = calculateHash(data);
+  const result = utils.transform(hash);
+  return result;
+}
+
+// The function will automatically import the required modules in the worker
+const result = await processData("some data");
+```
+
+#### Import Support Details
+
+- **Named imports**: `import { func } from 'module'` ✅
+- **Default imports**: `import module from 'module'` ✅
+- **Namespace imports**: `import * as module from 'module'` ✅
+- **Relative imports**: `import { func } from './local-module'` ✅
+- **Dynamic loading**: Imports are loaded dynamically when the worker starts
+
 #### Limitations
 
 While Easythread can handle most primitive values and plain objects, there are some limitations on what can be passed to a worker thread:
@@ -89,3 +116,4 @@ While Easythread can handle most primitive values and plain objects, there are s
 2. DOM elements: Workers don't have access to the DOM, so DOM elements can't be passed or used.
 3. Complex objects: Objects with circular references or those that can't be cloned (like Symbols) cannot be passed to workers.
 4. Class instances: Instances of custom classes may lose their methods when passed to a worker.
+5. Some node_modules: Not all npm packages are compatible with Web Workers (e.g., those requiring Node.js APIs or DOM access).
