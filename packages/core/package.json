@@ -1,0 +1,52 @@
+{
+  "name": "@easythread/core",
+  "version": "0.1.0",
+  "description": "Core transformer for easythread - automatic Web Worker and Worker Thread generation",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run"
+  },
+  "keywords": [
+    "web-workers",
+    "worker-threads",
+    "typescript",
+    "ast",
+    "transform"
+  ],
+  "author": "Lekë Dobruna",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/core": "^7.21.0",
+    "@babel/generator": "^7.21.0",
+    "@babel/parser": "^7.21.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@babel/traverse": "^7.21.0",
+    "@babel/types": "^7.25.6"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^3.2.4",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.3",
+    "vitest": "^3.2.4"
+  }
+}

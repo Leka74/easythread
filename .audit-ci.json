@@ -1,0 +1,9 @@
+{
+  "allowlist": [],
+  "high": true,
+  "moderate": false,
+  "low": false,
+  "package-manager": "pnpm",
+  "report-type": "important",
+  "skip-dev": false
+}

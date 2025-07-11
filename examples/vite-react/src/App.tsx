@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import styles from "./App.module.css";
+import { TestImports } from "./TestImports";
 
 /** @easythread */
 function heavyTaskEasyThread(count: number = 1): Promise<string> {
@@ -33,7 +34,7 @@ function App() {
   }, []);
 
   return (
-    <div className={styles.container}>
+    <div className={styles['container']}>
       <h1>EasyThread</h1>
       <div>{counter}</div>
       <div>
@@ -60,6 +61,7 @@ function App() {
           Normal task
         </button>
       </div>
+      <TestImports />
     </div>
   );
 }
