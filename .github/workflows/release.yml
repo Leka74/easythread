@@ -67,6 +67,15 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Setup NPM authentication  
+        run: |
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+          npm whoami
+          echo "Checking organization permissions..."
+          npm access list packages @easythread || echo "No packages found (expected for first publish)"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
