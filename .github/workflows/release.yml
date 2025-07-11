@@ -41,6 +41,7 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          scope: '@easythread'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -70,11 +71,24 @@ jobs:
       - name: Setup NPM authentication  
         run: |
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+          echo "Current NPM user:"
           npm whoami
-          echo "Checking organization permissions..."
-          npm access list packages @easythread || echo "No packages found (expected for first publish)"
+          echo ""
+          echo "Checking NPM token permissions:"
+          npm token list 2>/dev/null || echo "Could not list tokens (this is normal with publish tokens)"
+          echo ""
+          echo "Checking @easythread organization access:"
+          npm org ls @easythread 2>/dev/null || echo "Organization not accessible or doesn't exist"
+          echo ""
+          echo "Checking if we can access the organization packages:"
+          npm access list packages @easythread 2>/dev/null || echo "No packages found or no access (expected for first publish)"
+          echo ""
+          echo "Testing package publish permissions (dry run):"
+          cd packages/core
+          npm publish --dry-run --access public || echo "Dry run failed - this will help identify the issue"
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
@@ -87,6 +101,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Send Slack notification on release
         if: steps.changesets.outputs.published == 'true'
