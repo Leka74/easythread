@@ -180,12 +180,21 @@ export class EasythreadTransformer {
       );
       return `export ${transformedDeclaration}`;
     } else if (t.isFunctionDeclaration(node.declaration)) {
-      const transformedFunction = this.transformFunctionDeclaration(
-        node.declaration,
-        code,
-        options
-      );
-      return `export ${transformedFunction}`;
+      const functionName = node.declaration.id.name;
+      const functionCode = code.slice(node.declaration.start, node.declaration.end);
+      const workerCode = this.createWorkerCode(functionName, functionCode, false, options);
+      
+      // Split the worker code into lines and add export to the function line
+      const lines = workerCode.split('\n');
+      const exportedLines = lines.map(line => {
+        // Find the line that declares the function (not the blob)
+        if (line.trim().startsWith(`const ${functionName} = `)) {
+          return `export ${line}`;
+        }
+        return line;
+      });
+      
+      return exportedLines.join('\n');
     }
     return code.slice(node.start, node.end);
   }
@@ -308,7 +317,8 @@ export class EasythreadTransformer {
                 ) {
                   if (
                     !workerGlobals.has(name) &&
-                    !path.node.params.some((param: any) => param.name === name)
+                    !path.node.params.some((param: any) => param.name === name) &&
+                    name !== functionName // Don't include the function itself as external var
                   ) {
                     externalVars.add(name);
                   }

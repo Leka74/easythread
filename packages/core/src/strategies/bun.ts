@@ -80,14 +80,28 @@ const ${functionName} = (...args) => {
     return `
 self.onmessage = async function(e) {
   const { args, externalVars, baseURL } = e.data;
-  Object.assign(self, externalVars);
   
   // Store the base URL for import resolution
   self.__baseURL = baseURL;
   
+  // Apply external variables to global scope safely
+  try {
+    for (const [key, value] of Object.entries(externalVars)) {
+      if (key !== 'self' && key !== 'globalThis' && !key.startsWith('__')) {
+        self[key] = value;
+      }
+    }
+  } catch (e) {
+    // Ignore readonly property errors
+  }
+  
   // Make Bun globals available in worker context
   if (typeof Bun !== 'undefined') {
-    self.Bun = Bun;
+    try {
+      self.Bun = Bun;
+    } catch (e) {
+      // Ignore if Bun is readonly
+    }
   }
   
   try {
