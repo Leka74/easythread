@@ -1,6 +1,6 @@
 {
   "name": "@easythread/core",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Core transformer for easythread - automatic Web Worker and Worker Thread generation",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
