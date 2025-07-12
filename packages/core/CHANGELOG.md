@@ -1,5 +1,11 @@
 # @easythread/core
 
+## 0.1.3
+
+### Patch Changes
+
+- Release patch version with latest changes
+
 ## 0.1.2
 
 ### Patch Changes
