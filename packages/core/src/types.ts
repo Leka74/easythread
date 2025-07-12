@@ -6,7 +6,7 @@ export interface ImportInfo {
 }
 
 export interface PluginOptions {
-  environment?: 'browser' | 'node';
+  environment?: 'browser' | 'node' | 'bun';
   filePath?: string;
   resolveId?: (id: string, importer?: string) => Promise<string | null> | string | null;
 }
