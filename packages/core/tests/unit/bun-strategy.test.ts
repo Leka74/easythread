@@ -41,7 +41,9 @@ describe('BunWorkerStrategy', () => {
     });
 
     it('should properly escape worker code for Bun', () => {
-      const workerCodeWithSpecialChars = 'console.log(`template ${literal}`);';
+      const workerCodeWithSpecialChars = `console.log(\`template \${literal}\`);
+console.log('single quote string');
+function test() { return 42; }`;
       
       const result = strategy.generateWorkerSetup(
         'testFunction',
@@ -54,7 +56,7 @@ describe('BunWorkerStrategy', () => {
       expect(result).toContain('\\`');
       expect(result).toContain('\\${');
       expect(result).toContain('\\n');
-      expect(result).toContain('\\'');
+      expect(result).toContain('\\\'');
     });
 
     it('should include error handling with Bun-specific messaging', () => {
