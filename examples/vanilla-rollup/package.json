@@ -14,7 +14,7 @@
   "devDependencies": {
     "@easythread/rollup": "workspace:*",
     "@types/node": "^20.0.0",
-    "rollup": "^4.0.0",
+    "rollup": "^4.46.2",
     "rollup-plugin-typescript2": "^0.36.0",
     "typescript": "^5.5.3"
   }
