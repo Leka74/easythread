@@ -59,7 +59,7 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@vitest/ui": "^2.1.9",
+    "@vitest/ui": "^3.2.4",
     "nanoid": "^5.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
