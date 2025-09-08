@@ -48,7 +48,7 @@
     "@easythread/core": "workspace:*"
   },
   "devDependencies": {
-    "rollup": "^4.0.0",
+    "rollup": "^4.50.1",
     "tsup": "^8.0.0",
     "typescript": "^5.5.3"
   },
